@@ -27,9 +27,9 @@ RTC_DS3231 rtc;
 // --- SERVOS ---
 #define SERVOMIN 150
 #define SERVOMAX 600
-#define SERVO_CANAL_DOC 0
-#define SERVO_CANAL_ENF 1
-#define SERVO_CANAL_PAC 2
+#define SERVO_CANAL_MANT  0
+#define SERVO_CANAL_DISP1 1
+#define SERVO_CANAL_DISP2 2
 
 // --- CONFIGURACIÓN MÉDICA ---
 const unsigned long INTERVALO_SEG = 10; 
@@ -60,7 +60,7 @@ void menuAdministracion();
 void menuDoctor();
 void menuEnfermero();
 void menuPaciente();
-void modoMantenimiento(); // <-- nueva función
+void modoMantenimiento();
 
 // ---------------------------------------------------------------
 // ---------------   RUTINAS EN ENSAMBLADOR   --------------------
@@ -118,9 +118,9 @@ void setup() {
   pwm.begin();
   pwm.setPWMFreq(60);
   
-  pwm.setPWM(SERVO_CANAL_DOC, 0, SERVOMIN);
-  pwm.setPWM(SERVO_CANAL_ENF, 0, SERVOMIN);
-  pwm.setPWM(SERVO_CANAL_PAC, 0, SERVOMIN);
+  pwm.setPWM(SERVO_CANAL_MANT, 0, SERVOMIN);
+  pwm.setPWM(SERVO_CANAL_DISP1, 0, SERVOMIN);
+  pwm.setPWM(SERVO_CANAL_DISP2, 0, SERVOMIN);
 
   lcd.begin(16, 2);
   
@@ -389,7 +389,7 @@ void menuEnfermero() {
           while(digitalRead(BTN_ENTER) == LOW);
           
           lcd.clear(); lcd.print("Dispensando...");
-          dispensar(SERVO_CANAL_ENF);
+          dispensar(SERVO_CANAL_DISP1);
           guardarEvento(2);
           return;
        }
@@ -414,7 +414,7 @@ void menuPaciente() {
           if (esVentanaCorrecta()) {
              if (yaPasoTiempoSeguro()) {
                 lcd.clear(); lcd.print("Autorizado"); lcd.setCursor(0, 1); lcd.print("Dispensando...");
-                dispensar(SERVO_CANAL_PAC);
+                dispensar(SERVO_CANAL_DISP2);
                 guardarEvento(3); 
              } else {
                 lcd.clear(); lcd.print("Dosis ya tomada"); lcd.setCursor(0, 1); lcd.print("Espere...");
@@ -443,7 +443,7 @@ void modoMantenimiento() {
   delay(500);
 
   // --- ABRIR SERVO DEL DOCTOR ---
-  pwm.setPWM(SERVO_CANAL_DOC, 0, SERVOMAX);
+  pwm.setPWM(SERVO_CANAL_MANT, 0, SERVOMAX);
   delay(300);
 
   // Indicador visual de entrada al modo
@@ -460,7 +460,7 @@ void modoMantenimiento() {
     asm_blink_led();
 
     // --- EL SERVO SE MANTIENE ABIERTO SIEMPRE ---
-    pwm.setPWM(SERVO_CANAL_DOC, 0, SERVOMAX);
+    pwm.setPWM(SERVO_CANAL_MANT, 0, SERVOMAX);
 
     // Verificar salida con botón ENTER
     if (digitalRead(BTN_ENTER) == LOW) {
@@ -468,7 +468,7 @@ void modoMantenimiento() {
       while (digitalRead(BTN_ENTER) == LOW) delay(10);
 
       // Cerrar servo ANTES de salir
-      pwm.setPWM(SERVO_CANAL_DOC, 0, SERVOMIN);
+      pwm.setPWM(SERVO_CANAL_MANT, 0, SERVOMIN);
 
       lcd.clear();
       lcd.print("Saliendo...");
