@@ -24,12 +24,14 @@ MFRC522 mfrc522(SS_PIN, RST_PIN);
 Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 RTC_DS3231 rtc;
 
-// SERVOS
+// SERVOS Y VELOCIDAD
 #define SERVOMIN 150
-#define SERVOMAX 600
+#define SERVOMAX 300
 #define SERVO_CANAL_MANT 0
 #define SERVO_CANAL_DISP1 1
 #define SERVO_CANAL_DISP2 2
+
+#define VELOCIDAD_SERVO 1
 
 // LISTA DE MEDICAMENTOS PREDEFINIDOS
 const char *LISTA_MEDICAMENTOS[] = {
@@ -69,7 +71,6 @@ struct LogEntry
   byte hora;
   byte min;
 };
-
 struct ConfigMedicamento
 {
   byte medicamentoIndex;
@@ -114,6 +115,8 @@ void mostrarMenuMedicamentos(int &medIndex, int &contenedor);
 ConfigPaciente leerConfiguracionPaciente(byte *uidPaciente);
 void guardarConfiguracionPaciente(byte *uidPaciente, ConfigPaciente config);
 void configurarHorarioIndividual(ConfigMedicamento &config);
+void menuSeleccionManual(byte rol);
+void moverServo(int canal, int inicio, int fin);
 
 // Función de antirebote que usa el ensamblador
 bool botonNavegarPresionado()
@@ -143,7 +146,6 @@ bool botonEnterPresionado()
 {
   static unsigned long ultimoTiempo = 0;
   static bool estadoAnterior = HIGH;
-
   bool estadoActual = digitalRead(BTN_ENTER);
   unsigned long tiempoActual = millis();
 
@@ -224,7 +226,6 @@ void setup()
 
   pinMode(ASM_LED_PIN, OUTPUT);
   digitalWrite(ASM_LED_PIN, LOW);
-
   pinMode(BTN_NAVEGAR, INPUT_PULLUP);
   pinMode(BTN_ENTER, INPUT_PULLUP);
 
@@ -232,6 +233,7 @@ void setup()
   pwm.begin();
   pwm.setPWMFreq(60);
 
+  // Posición inicial cerrada
   pwm.setPWM(SERVO_CANAL_MANT, 0, SERVOMIN);
   pwm.setPWM(SERVO_CANAL_DISP1, 0, SERVOMIN);
   pwm.setPWM(SERVO_CANAL_DISP2, 0, SERVOMIN);
@@ -291,12 +293,38 @@ void setup()
   lcd.clear();
 }
 
+void moverServo(int canal, int inicio, int fin)
+{
+  if (inicio < fin)
+  {
+    for (int pulso = inicio; pulso <= fin; pulso += 5)
+    {
+      pwm.setPWM(canal, 0, pulso);
+      delay(VELOCIDAD_SERVO);
+    }
+  }
+  else
+  {
+    for (int pulso = inicio; pulso >= fin; pulso -= 5)
+    {
+      pwm.setPWM(canal, 0, pulso);
+      delay(VELOCIDAD_SERVO);
+    }
+  }
+}
+
 void dispensar(int canalServo)
 {
   asm_blink_led();
-  pwm.setPWM(canalServo, 0, SERVOMAX);
-  delay(100);
-  pwm.setPWM(canalServo, 0, SERVOMIN);
+
+  // ABRIR SUAVE
+  moverServo(canalServo, SERVOMIN, SERVOMAX);
+
+  delay(800); // Tiempo abierto para que caiga
+
+  // CERRAR SUAVE
+  moverServo(canalServo, SERVOMAX, SERVOMIN);
+
   delay(50);
 }
 
@@ -416,7 +444,6 @@ void configurarMedicamentosContenedores()
     lcd.setCursor(0, 1);
     lcd.print("                ");
     lcd.setCursor(0, 1);
-
     if (contenedorActual == 0)
     {
       lcd.print("C1:");
@@ -428,7 +455,6 @@ void configurarMedicamentosContenedores()
       lcd.print(LISTA_MEDICAMENTOS[medCont2]);
     }
 
-    // USAR ENSAMBLADOR CON ANTIREBOTE
     if (botonNavegarPresionado())
     {
       if (contenedorActual == 0)
@@ -442,7 +468,6 @@ void configurarMedicamentosContenedores()
       esperarLiberacionBotonNavegar();
     }
 
-    // USAR ANTIREBOTE PARA ENTER
     if (botonEnterPresionado())
     {
       contenedorActual++;
@@ -466,14 +491,12 @@ ConfigPaciente leerConfiguracionPaciente(byte *uidPaciente)
 {
   ConfigPaciente config;
   int indicePaciente = buscarIndiceUsuario(uidPaciente);
-
   if (indicePaciente != -1)
   {
     int addr = EEPROM_PACIENTE_MEDICAMENTOS + (indicePaciente * sizeof(ConfigPaciente));
     EEPROM.get(addr, config);
   }
 
-  // Si no hay configuración previa, inicializar con valores por defecto
   if (config.med1.intervalo == 0)
   {
     config.med1.medicamentoIndex = 0;
@@ -509,7 +532,6 @@ void mostrarMenuMedicamentos(int &medIndex, int &contenedor)
 
   lcd.clear();
   lcd.print("Selec Contenedor");
-
   while (seleccionando)
   {
     lcd.setCursor(0, 1);
@@ -529,14 +551,12 @@ void mostrarMenuMedicamentos(int &medIndex, int &contenedor)
       lcd.print(LISTA_MEDICAMENTOS[med]);
     }
 
-    // USAR ENSAMBLADOR CON ANTIREBOTE
     if (botonNavegarPresionado())
     {
       opcion = (opcion + 1) % 2;
       esperarLiberacionBotonNavegar();
     }
 
-    // USAR ANTIREBOTE PARA ENTER
     if (botonEnterPresionado())
     {
       if (opcion == 0)
@@ -561,7 +581,6 @@ void configurarHorarioIndividual(ConfigMedicamento &config)
 {
   bool editando = true;
   int campo = 0;
-
   while (editando)
   {
     lcd.setCursor(0, 1);
@@ -579,7 +598,6 @@ void configurarHorarioIndividual(ConfigMedicamento &config)
     lcd.print(config.intervalo / 3600);
     lcd.print("h");
 
-    // USAR ENSAMBLADOR CON ANTIREBOTE
     if (botonNavegarPresionado())
     {
       if (campo == 0)
@@ -599,7 +617,6 @@ void configurarHorarioIndividual(ConfigMedicamento &config)
       esperarLiberacionBotonNavegar();
     }
 
-    // USAR ANTIREBOTE PARA ENTER
     if (botonEnterPresionado())
     {
       campo++;
@@ -650,7 +667,6 @@ void configurarMedicamentoPaciente()
 
   lcd.clear();
   lcd.print("Config Paciente");
-
   while (enMenu)
   {
     lcd.setCursor(0, 1);
@@ -670,18 +686,15 @@ void configurarMedicamentoPaciente()
       break;
     }
 
-    // Navegación con ENSAMBLADOR Y ANTIREBOTE
     if (botonNavegarPresionado())
     {
       opcion = (opcion + 1) % 3;
       esperarLiberacionBotonNavegar();
     }
 
-    // Confirmación con ANTIREBOTE
     if (botonEnterPresionado())
     {
       esperarLiberacionBotonEnter();
-
       if (opcion == 0)
       {
         // Configurar Medicamento 1
@@ -692,7 +705,6 @@ void configurarMedicamentoPaciente()
 
         bool decidido = false;
         bool activar = true;
-
         while (!decidido)
         {
           if (botonNavegarPresionado())
@@ -745,7 +757,6 @@ void configurarMedicamentoPaciente()
 
         bool decidido = false;
         bool activar = true;
-
         while (!decidido)
         {
           if (botonNavegarPresionado())
@@ -798,7 +809,6 @@ void configurarMedicamentoPaciente()
         enMenu = false;
       }
 
-      // Volver al menú principal después de cada operación
       if (enMenu)
       {
         lcd.clear();
@@ -815,7 +825,6 @@ unsigned long obtenerUltimaTomaPaciente(byte *uidPaciente, int numMed)
   int indicePaciente = buscarIndiceUsuario(uidPaciente);
   if (indicePaciente == -1)
     return 0;
-
   int addr = EEPROM_LAST_TIMES_START + (indicePaciente * LAST_TIME_RECORD_SIZE * 2) + (numMed * LAST_TIME_RECORD_SIZE);
   unsigned long ultimaToma;
   EEPROM.get(addr, ultimaToma);
@@ -842,7 +851,6 @@ void guardarEvento(byte rol, byte *uidPaciente, int numMed)
   if (currentLogIndex >= MAX_LOGS)
     currentLogIndex = 0;
   EEPROM.write(511, currentLogIndex);
-
   if (rol == 3 && uidPaciente != nullptr && numMed != -1)
   {
     unsigned long tiempoActual = now.unixtime();
@@ -854,7 +862,6 @@ bool yaPasoTiempoSeguro(byte *uidPaciente, int numMed)
 {
   ConfigPaciente configPac = leerConfiguracionPaciente(uidPaciente);
   ConfigMedicamento config;
-
   if (numMed == 0)
   {
     config = configPac.med1;
@@ -880,7 +887,6 @@ bool esVentanaCorrecta(byte *uidPaciente, int numMed)
 {
   ConfigPaciente configPac = leerConfiguracionPaciente(uidPaciente);
   ConfigMedicamento config;
-
   if (numMed == 0)
   {
     config = configPac.med1;
@@ -892,25 +898,21 @@ bool esVentanaCorrecta(byte *uidPaciente, int numMed)
 
   if (!config.activo)
     return false;
-
   DateTime now = rtc.now();
   long minutosConfig = config.hora * 60 + config.minuto;
   long minutosActual = now.hour() * 60 + now.minute();
-
   return (minutosActual >= minutosConfig) && (minutosActual <= minutosConfig + 30);
 }
 
 void configurarHoraRTC()
 {
   DateTime now = rtc.now();
-
   int hora = now.hour();
   int minuto = now.minute();
   int segundo = 0;
 
   int campo = 0;
   bool editando = true;
-
   lcd.clear();
   lcd.print("Configurar Hora");
 
@@ -931,7 +933,6 @@ void configurarHoraRTC()
       lcd.print("0");
     lcd.print(segundo);
 
-    // USAR ENSAMBLADOR CON ANTIREBOTE
     if (botonNavegarPresionado())
     {
       if (campo == 0)
@@ -949,7 +950,6 @@ void configurarHoraRTC()
       esperarLiberacionBotonNavegar();
     }
 
-    // USAR ANTIREBOTE PARA ENTER
     if (botonEnterPresionado())
     {
       campo++;
@@ -962,7 +962,6 @@ void configurarHoraRTC()
 
         bool confirmando = true;
         bool opcionConfirmar = true;
-
         while (confirmando)
         {
           lcd.setCursor(0, 1);
@@ -977,7 +976,6 @@ void configurarHoraRTC()
             lcd.print(" Si  >No");
           }
 
-          // USAR ENSAMBLADOR CON ANTIREBOTE
           if (botonNavegarPresionado())
           {
             opcionConfirmar = !opcionConfirmar;
@@ -1021,7 +1019,6 @@ void registrarPacienteConEnfermero()
 
   lcd.clear();
   lcd.print("Pase tarjeta...");
-
   while (!mfrc522.PICC_IsNewCardPresent() || !mfrc522.PICC_ReadCardSerial())
   {
     if (asm_leer_boton() == 0)
@@ -1033,7 +1030,6 @@ void registrarPacienteConEnfermero()
   byte uidPaciente[4];
   for (int i = 0; i < 4; i++)
     uidPaciente[i] = mfrc522.uid.uidByte[i];
-
   if (identificarUsuario(uidPaciente) != 0)
   {
     lcd.clear();
@@ -1063,7 +1059,6 @@ void asignarEnfermeroAPaciente()
   lcd.print("Asignar Enfermero");
   lcd.setCursor(0, 1);
   lcd.print("Pase tarjeta...");
-
   while (!mfrc522.PICC_IsNewCardPresent() || !mfrc522.PICC_ReadCardSerial())
   {
     if (asm_leer_boton() == 0)
@@ -1075,7 +1070,6 @@ void asignarEnfermeroAPaciente()
   byte uidEnfermero[4];
   for (int i = 0; i < 4; i++)
     uidEnfermero[i] = mfrc522.uid.uidByte[i];
-
   byte rolEnfermero = identificarUsuario(uidEnfermero);
 
   if (rolEnfermero == 0)
@@ -1084,7 +1078,6 @@ void asignarEnfermeroAPaciente()
     lcd.print("No registrado");
     lcd.setCursor(0, 1);
     lcd.print("Registrar?");
-
     bool decidido = false;
     bool registrar = true;
 
@@ -1157,7 +1150,6 @@ void registrarNuevoUsuario()
   byte nuevoUID[4];
   for (int i = 0; i < 4; i++)
     nuevoUID[i] = mfrc522.uid.uidByte[i];
-
   byte rolElegido = 2;
   bool seleccionando = true;
 
@@ -1170,7 +1162,6 @@ void registrarNuevoUsuario()
     lcd.print("                ");
     lcd.setCursor(0, 1);
     lcd.print("Sel:OK");
-
     if (botonNavegarPresionado())
     {
       if (rolElegido == 2)
@@ -1212,11 +1203,65 @@ void registrarNuevoUsuario()
   }
 }
 
+void menuSeleccionManual(byte rol)
+{
+  int opcion = 0;
+  bool seleccionando = true;
+
+  lcd.clear();
+  lcd.print("Selec Disp:");
+
+  while (seleccionando)
+  {
+    lcd.setCursor(0, 1);
+    lcd.print("                ");
+    lcd.setCursor(0, 1);
+
+    if (opcion == 0)
+    {
+      lcd.print(">C1:");
+      byte med = obtenerMedicamentoContenedor(MED_CONTAINER_1);
+      lcd.print(LISTA_MEDICAMENTOS[med]);
+    }
+    else
+    {
+      lcd.print(">C2:");
+      byte med = obtenerMedicamentoContenedor(MED_CONTAINER_2);
+      lcd.print(LISTA_MEDICAMENTOS[med]);
+    }
+
+    if (botonNavegarPresionado())
+    {
+      opcion = (opcion + 1) % 2;
+      esperarLiberacionBotonNavegar();
+    }
+
+    if (botonEnterPresionado())
+    {
+      esperarLiberacionBotonEnter();
+
+      int canal = (opcion == 0) ? SERVO_CANAL_DISP1 : SERVO_CANAL_DISP2;
+      int medIndex = (opcion == 0) ? obtenerMedicamentoContenedor(MED_CONTAINER_1) : obtenerMedicamentoContenedor(MED_CONTAINER_2);
+
+      lcd.clear();
+      lcd.print("Dispensando...");
+      dispensar(canal);
+      // Guardamos el evento sin UID de paciente (nullptr) pero indicamos el medicamento
+      guardarEvento(rol, nullptr, medIndex);
+
+      lcd.clear();
+      lcd.print("Entregado OK");
+      delay(1000);
+      seleccionando = false;
+    }
+    delay(50);
+  }
+}
+
 void menuAdministracion()
 {
   lcd.clear();
   lcd.print("MENU ADMIN");
-
   bool salir = false;
   int subOpcion = 0;
 
@@ -1225,7 +1270,6 @@ void menuAdministracion()
     lcd.setCursor(0, 1);
     lcd.print("                ");
     lcd.setCursor(0, 1);
-
     switch (subOpcion)
     {
     case 0:
@@ -1295,7 +1339,6 @@ void menuDoctor()
 
   lcd.clear();
   lcd.print("Hola Doctor");
-
   while (!salir)
   {
     lcd.setCursor(0, 1);
@@ -1305,28 +1348,31 @@ void menuDoctor()
     switch (opcion)
     {
     case 0:
-      lcd.print(">Admin");
+      lcd.print(">Dispensar");
       break;
     case 1:
-      lcd.print(">Mantenimiento");
+      lcd.print(">Admin");
       break;
     case 2:
-      lcd.print(">Config Med");
+      lcd.print(">Mantenimiento");
       break;
     case 3:
-      lcd.print(">Config Hora");
+      lcd.print(">Config Med");
       break;
     case 4:
-      lcd.print(">Config Cont");
+      lcd.print(">Config Hora");
       break;
     case 5:
+      lcd.print(">Config Cont");
+      break;
+    case 6:
       lcd.print(">Salir");
       break;
     }
 
     if (botonNavegarPresionado())
     {
-      opcion = (opcion + 1) % 6;
+      opcion = (opcion + 1) % 7;
       esperarLiberacionBotonNavegar();
     }
 
@@ -1335,21 +1381,24 @@ void menuDoctor()
       switch (opcion)
       {
       case 0:
-        menuAdministracion();
+        menuSeleccionManual(1);
         break;
       case 1:
-        modoMantenimiento();
+        menuAdministracion();
         break;
       case 2:
-        configurarMedicamentoPaciente();
+        modoMantenimiento();
         break;
       case 3:
-        configurarHoraRTC();
+        configurarMedicamentoPaciente();
         break;
       case 4:
-        configurarMedicamentosContenedores();
+        configurarHoraRTC();
         break;
       case 5:
+        configurarMedicamentosContenedores();
+        break;
+      case 6:
         salir = true;
         break;
       }
@@ -1371,7 +1420,6 @@ void menuEnfermero()
 
   lcd.clear();
   lcd.print("Hola Enfermero");
-
   while (!salir)
   {
     lcd.setCursor(0, 1);
@@ -1384,7 +1432,6 @@ void menuEnfermero()
       lcd.print(">Config Med");
     else
       lcd.print(">Salir");
-
     if (botonNavegarPresionado())
     {
       opcion = (opcion + 1) % 3;
@@ -1395,10 +1442,7 @@ void menuEnfermero()
     {
       if (opcion == 0)
       {
-        lcd.clear();
-        lcd.print("Dispensando...");
-        dispensar(SERVO_CANAL_DISP1);
-        guardarEvento(2);
+        menuSeleccionManual(2);
       }
       else if (opcion == 1)
       {
@@ -1422,7 +1466,6 @@ void menuEnfermero()
 
 void menuPaciente()
 {
-  // Guardar el UID del paciente actual
   byte uidPaciente[4];
   for (int i = 0; i < 4; i++)
     uidPaciente[i] = mfrc522.uid.uidByte[i];
@@ -1440,10 +1483,8 @@ void menuPaciente()
     if (botonEnterPresionado())
     {
       esperarLiberacionBotonEnter();
-
       bool med1Disponible = config.med1.activo && esVentanaCorrecta(uidPaciente, 0) && yaPasoTiempoSeguro(uidPaciente, 0);
       bool med2Disponible = config.med2.activo && esVentanaCorrecta(uidPaciente, 1) && yaPasoTiempoSeguro(uidPaciente, 1);
-
       if (med1Disponible && med2Disponible)
       {
         lcd.clear();
@@ -1453,7 +1494,6 @@ void menuPaciente()
 
         bool seleccionando = true;
         int opcionMed = 0;
-
         while (seleccionando)
         {
           lcd.setCursor(0, 1);
@@ -1528,39 +1568,96 @@ void modoMantenimiento()
 {
   lcd.clear();
   lcd.print("MODO MANTENIM.");
-  lcd.setCursor(0, 1);
-  lcd.print("OK = Salir");
-  delay(500);
 
-  // Abrir servo
-  pwm.setPWM(SERVO_CANAL_MANT, 0, SERVOMAX);
-  delay(300);
-  while (digitalRead(BTN_ENTER) == LOW)
-  {
-    delay(50);
-  }
+  moverServo(SERVO_CANAL_MANT, SERVOMIN, SERVOMAX);
 
-  while (true)
+  bool enMantenimiento = true;
+  int opcion = 0;
+
+  while (enMantenimiento)
   {
+    lcd.setCursor(0, 1);
+    lcd.print("                ");
+    lcd.setCursor(0, 1);
+
+    if (opcion == 0)
+      lcd.print(">Abrir Disp 1");
+    else if (opcion == 1)
+      lcd.print(">Abrir Disp 2");
+    else
+      lcd.print(">Salir");
+
+    if (botonNavegarPresionado())
+    {
+      opcion = (opcion + 1) % 3;
+      esperarLiberacionBotonNavegar();
+    }
+
     if (botonEnterPresionado())
     {
       esperarLiberacionBotonEnter();
-      pwm.setPWM(SERVO_CANAL_MANT, 0, SERVOMIN);
-      lcd.clear();
-      lcd.print("Saliendo...");
-      delay(600);
-      lcd.clear();
-      return;
+
+      if (opcion == 0)
+      {
+        // Abrir Disp 1 SUAVE
+        moverServo(SERVO_CANAL_DISP1, SERVOMIN, SERVOMAX);
+        lcd.clear();
+        lcd.print("D1 Abierto");
+        lcd.setCursor(0, 1);
+        lcd.print("OK para cerrar");
+
+        while (!botonEnterPresionado())
+        {
+          delay(50);
+        }
+        esperarLiberacionBotonEnter();
+
+        // Cerrar Disp 1 SUAVE
+        moverServo(SERVO_CANAL_DISP1, SERVOMAX, SERVOMIN);
+        lcd.clear();
+        lcd.print("MODO MANTENIM.");
+      }
+      else if (opcion == 1)
+      {
+        // Abrir Disp 2 SUAVE
+        moverServo(SERVO_CANAL_DISP2, SERVOMIN, SERVOMAX);
+        lcd.clear();
+        lcd.print("D2 Abierto");
+        lcd.setCursor(0, 1);
+        lcd.print("OK para cerrar");
+
+        while (!botonEnterPresionado())
+        {
+          delay(50);
+        }
+        esperarLiberacionBotonEnter();
+
+        // Cerrar Disp 2 SUAVE
+        moverServo(SERVO_CANAL_DISP2, SERVOMAX, SERVOMIN);
+        lcd.clear();
+        lcd.print("MODO MANTENIM.");
+      }
+      else
+      {
+        enMantenimiento = false;
+      }
     }
-    delay(100);
+    delay(50);
   }
+
+  // Cerrar tapa de seguridad SUAVEMENTE al salir
+  moverServo(SERVO_CANAL_MANT, SERVOMAX, SERVOMIN);
+
+  lcd.clear();
+  lcd.print("Saliendo...");
+  delay(600);
+  lcd.clear();
 }
 
 void loop()
 {
   static long lastTime = 0;
   static bool tarjetaDetectada = false;
-
   if (millis() - lastTime > 1000)
   {
     DateTime now = rtc.now();
@@ -1581,7 +1678,6 @@ void loop()
   if (!tarjetaDetectada && mfrc522.PICC_IsNewCardPresent() && mfrc522.PICC_ReadCardSerial())
   {
     tarjetaDetectada = true;
-
     byte rol = identificarUsuario(mfrc522.uid.uidByte);
     asm_blink_led();
 
