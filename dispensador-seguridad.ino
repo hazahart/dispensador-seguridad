@@ -316,13 +316,9 @@ void moverServo(int canal, int inicio, int fin)
 void dispensar(int canalServo)
 {
   asm_blink_led();
-
-  // ABRIR SUAVE
   moverServo(canalServo, SERVOMIN, SERVOMAX);
 
-  delay(800); // Tiempo abierto para que caiga
-
-  // CERRAR SUAVE
+  delay(800);
   moverServo(canalServo, SERVOMAX, SERVOMIN);
 
   delay(50);
@@ -1246,7 +1242,6 @@ void menuSeleccionManual(byte rol)
       lcd.clear();
       lcd.print("Dispensando...");
       dispensar(canal);
-      // Guardamos el evento sin UID de paciente (nullptr) pero indicamos el medicamento
       guardarEvento(rol, nullptr, medIndex);
 
       lcd.clear();
@@ -1599,7 +1594,6 @@ void modoMantenimiento()
 
       if (opcion == 0)
       {
-        // Abrir Disp 1 SUAVE
         moverServo(SERVO_CANAL_DISP1, SERVOMIN, SERVOMAX);
         lcd.clear();
         lcd.print("D1 Abierto");
@@ -1612,14 +1606,12 @@ void modoMantenimiento()
         }
         esperarLiberacionBotonEnter();
 
-        // Cerrar Disp 1 SUAVE
         moverServo(SERVO_CANAL_DISP1, SERVOMAX, SERVOMIN);
         lcd.clear();
         lcd.print("MODO MANTENIM.");
       }
       else if (opcion == 1)
       {
-        // Abrir Disp 2 SUAVE
         moverServo(SERVO_CANAL_DISP2, SERVOMIN, SERVOMAX);
         lcd.clear();
         lcd.print("D2 Abierto");
@@ -1632,7 +1624,6 @@ void modoMantenimiento()
         }
         esperarLiberacionBotonEnter();
 
-        // Cerrar Disp 2 SUAVE
         moverServo(SERVO_CANAL_DISP2, SERVOMAX, SERVOMIN);
         lcd.clear();
         lcd.print("MODO MANTENIM.");
@@ -1645,7 +1636,6 @@ void modoMantenimiento()
     delay(50);
   }
 
-  // Cerrar tapa de seguridad SUAVEMENTE al salir
   moverServo(SERVO_CANAL_MANT, SERVOMAX, SERVOMIN);
 
   lcd.clear();
